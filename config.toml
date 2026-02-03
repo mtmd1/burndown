@@ -1,0 +1,80 @@
+# ──────────────────────────────────────────────
+# Burndown Chart Configuration
+# ──────────────────────────────────────────────
+# Edit any value below to customise the chart.
+# Colours can be any common name: "red", "blue",
+# "light blue", "dark green", "salmon", "gold",
+# "coral", "steel blue", "tomato", "plum", etc.
+# See the full list at:
+#   https://matplotlib.org/stable/gallery/color/named_colors.html
+# ──────────────────────────────────────────────
+
+[chart]
+# Image width and height in inches (for the PNG)
+width = 10
+height = 6
+
+# Resolution of the PNG in dots per inch
+dpi = 150
+
+# Title shown above the chart
+# Use {plan} to insert the plan name from the xlsx
+title = "{plan} — Burndown"
+
+[actual_line]
+colour = "dodger blue"
+thickness = 2.5
+
+[ideal_line]
+colour = "grey"
+thickness = 1.5
+# "solid", "dashed", "dotted", or "dash-dot"
+style = "dashed"
+
+[grid]
+# Show horizontal grid lines behind the chart
+show = true
+# 0.0 = invisible, 1.0 = fully opaque
+opacity = 0.3
+
+[legend]
+# "upper right", "upper left", "lower right", "lower left"
+position = "upper right"
+
+[dates]
+# How dates appear on the x-axis, e.g. "Jan 05"
+# Common tokens: %b = short month, %d = day, %Y = year
+format = "%b %d"
+
+# X-axis label rotation in degrees
+label_angle = 45
+
+[gaps]
+# Periods of inactivity longer than this many days
+# are compressed when using --compress
+# Can be overridden: --compress 10
+compress_after_days = 7
+
+# Visual break marker at each compressed gap
+marker_colour = "light grey"
+marker_label_colour = "dim grey"
+# "diagonal", "cross", or "dots"
+marker_pattern = "diagonal"
+
+[sprints]
+# Background colours for sprint shading (one per sprint,
+# cycles if there are more sprints than colours).
+# Each colour also has an opacity setting (0.0–1.0).
+opacity = 0.5
+
+colours = [
+    "light blue",
+    "peach puff",
+    "light green",
+    "lavender blush",
+    "thistle",
+]
+
+# Colour and size of sprint labels shown in the chart
+label_colour = "dim grey"
+label_size = 11
