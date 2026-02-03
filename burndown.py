@@ -256,7 +256,7 @@ def plot_matplotlib(burndown, ideal, total_tasks, sprints, title, start, end, cf
     sprint_colours = cfg["sprints"]["colours"]
     sprint_opacity = cfg["sprints"]["opacity"]
 
-    for i, (_, sprint) in enumerate(sprints.iterrows()):
+    for _, sprint in sprints.iterrows():
         s = max(sprint["start_date"], start)
         e = min(sprint["end_date"], end)
         if s >= end or e <= start:
@@ -265,7 +265,7 @@ def plot_matplotlib(burndown, ideal, total_tasks, sprints, title, start, end, cf
         ei = _date_to_idx(e, date_list)
         ax.axvspan(
             si, ei, alpha=sprint_opacity,
-            color=normalise_colour(sprint_colours[i % len(sprint_colours)]),
+            color=normalise_colour(sprint_colours[int(sprint["id"]) % len(sprint_colours)]),
             label=f"Sprint {sprint['id']}",
         )
 
@@ -321,8 +321,8 @@ def plot_matplotlib(burndown, ideal, total_tasks, sprints, title, start, end, cf
             )
             ax.add_patch(rect)
             ax.annotate(
-                f" {days}d ", (idx, total_tasks * 0.5),
-                ha="center", va="center", fontsize=8, fontweight="bold",
+                f" {days}d ", (idx, (total_tasks + 1) * 0.05),
+                ha="center", va="bottom", fontsize=8, fontweight="bold",
                 color=label_colour,
                 bbox=dict(boxstyle="round,pad=0.3", fc="white", ec="grey", alpha=0.9),
             )
@@ -342,31 +342,48 @@ def plot_matplotlib(burndown, ideal, total_tasks, sprints, title, start, end, cf
 def plot_plotly(burndown, ideal, total_tasks, sprints, title, start, end, cfg, gaps=None):
     fig = go.Figure()
 
+    compress = bool(gaps)
+    date_list = burndown["date"].tolist()
+
     sprint_colours = cfg["sprints"]["colours"]
     sprint_opacity = cfg["sprints"]["opacity"]
     label_colour = cfg["sprints"]["label_colour"]
     label_size = cfg["sprints"]["label_size"]
 
-    for i, (_, sprint) in enumerate(sprints.iterrows()):
+    for _, sprint in sprints.iterrows():
         s = max(sprint["start_date"], start)
         e = min(sprint["end_date"], end)
         if s >= end or e <= start:
             continue
-        colour_name = sprint_colours[i % len(sprint_colours)]
+        colour_name = sprint_colours[int(sprint["id"]) % len(sprint_colours)]
+
+        if compress:
+            x0 = _date_to_idx(s, date_list)
+            x1 = _date_to_idx(e, date_list)
+            mid = (x0 + x1) / 2
+        else:
+            x0, x1 = s, e
+            mid = s + (e - s) / 2
+
         fig.add_vrect(
-            x0=s, x1=e,
-            fillcolor=colour_to_rgba(colour_name, sprint_opacity),
+            x0=x0, x1=x1,
+            fillcolor=normalise_colour(colour_name),
+            opacity=sprint_opacity,
             line_width=0,
             layer="below",
-            annotation_text=f"Sprint {sprint['id']}",
-            annotation_position="top left",
-            annotation_font_size=label_size,
-            annotation_font_color=label_colour,
+        )
+        fig.add_annotation(
+            x=mid, y=0, yref="paper",
+            text=f"Sprint {sprint['id']}",
+            showarrow=False,
+            font=dict(size=label_size, color=label_colour),
+            yanchor="bottom", yshift=5,
         )
 
     ideal_cfg = cfg["ideal_line"]
+    ideal_x = [_date_to_idx(d, date_list) for d in ideal["date"]] if compress else ideal["date"]
     fig.add_trace(go.Scatter(
-        x=ideal["date"], y=ideal["remaining"],
+        x=ideal_x, y=ideal["remaining"],
         mode="lines",
         line=dict(
             dash=PLOTLY_LINE_STYLES.get(ideal_cfg["style"], "dash"),
@@ -377,44 +394,52 @@ def plot_plotly(burndown, ideal, total_tasks, sprints, title, start, end, cfg, g
     ))
 
     actual_cfg = cfg["actual_line"]
-    fig.add_trace(go.Scatter(
-        x=burndown["date"], y=burndown["remaining"],
-        mode="lines",
-        line=dict(shape="hv", color=normalise_colour(actual_cfg["colour"]), width=actual_cfg["thickness"]),
-        name="Actual",
-        hovertemplate="Date: %{x|" + cfg["dates"]["format"] + "}<br>Remaining: %{y}<extra></extra>",
-    ))
+    if compress:
+        x_actual = list(range(len(date_list)))
+        hover_dates = [d.strftime(cfg["dates"]["format"]) for d in date_list]
+        fig.add_trace(go.Scatter(
+            x=x_actual, y=burndown["remaining"].tolist(),
+            mode="lines",
+            line=dict(shape="hv", color=normalise_colour(actual_cfg["colour"]), width=actual_cfg["thickness"]),
+            name="Actual",
+            customdata=hover_dates,
+            hovertemplate="Date: %{customdata}<br>Remaining: %{y}<extra></extra>",
+        ))
+    else:
+        fig.add_trace(go.Scatter(
+            x=burndown["date"], y=burndown["remaining"],
+            mode="lines",
+            line=dict(shape="hv", color=normalise_colour(actual_cfg["colour"]), width=actual_cfg["thickness"]),
+            name="Actual",
+            hovertemplate="Date: %{x|" + cfg["dates"]["format"] + "}<br>Remaining: %{y}<extra></extra>",
+        ))
 
-    rangebreaks = []
-    if gaps:
+    if compress:
         gap_cfg = cfg["gaps"]
         marker_colour = gap_cfg["marker_colour"]
-        label_colour = normalise_colour(gap_cfg["marker_label_colour"])
-        for gs, ge in gaps:
-            rangebreaks.append(dict(bounds=[gs.isoformat(), (ge + timedelta(days=1)).isoformat()]))
-            days = (ge - gs).days + 1
-            # Marker line at the boundary just before the gap
-            boundary = gs - timedelta(days=1)
+        gap_label_colour = normalise_colour(gap_cfg["marker_label_colour"])
+        gap_positions = _find_gap_positions(date_list, gaps)
+        for idx, days in gap_positions:
             fig.add_vline(
-                x=boundary.isoformat(),
+                x=idx,
                 line=dict(color=normalise_colour(marker_colour), width=2, dash="dot"),
                 layer="below",
             )
             fig.add_annotation(
-                x=boundary.isoformat(),
-                y=1.0, yref="paper",
+                x=idx,
+                y=0, yref="paper",
                 text=f"<b>{days}d</b>",
                 showarrow=False,
-                font=dict(size=10, color=label_colour),
+                font=dict(size=10, color=gap_label_colour),
                 bgcolor=colour_to_rgba(marker_colour, 0.6),
                 bordercolor="grey",
                 borderwidth=1,
                 borderpad=3,
-                yanchor="top",
+                yanchor="bottom", yshift=5,
             )
 
     grid_cfg = cfg["grid"]
-    fig.update_layout(
+    layout_kwargs = dict(
         title=title,
         xaxis_title="Date",
         yaxis_title="Tasks Remaining",
@@ -423,13 +448,28 @@ def plot_plotly(burndown, ideal, total_tasks, sprints, title, start, end, cfg, g
             showgrid=grid_cfg["show"],
             gridcolor=colour_to_rgba("grey", grid_cfg["opacity"]) if grid_cfg["show"] else None,
         ),
-        xaxis=dict(
-            tickformat=cfg["dates"]["format"],
-            rangebreaks=rangebreaks if rangebreaks else None,
-        ),
         template="plotly_white",
         hovermode="x unified",
     )
+
+    if compress:
+        date_fmt = cfg["dates"]["format"]
+        if len(date_list) <= 15:
+            tickvals = list(range(len(date_list)))
+            ticktext = [d.strftime(date_fmt) for d in date_list]
+        else:
+            step = max(1, len(date_list) // 10)
+            tickvals = list(range(0, len(date_list), step))
+            ticktext = [date_list[t].strftime(date_fmt) for t in tickvals]
+        layout_kwargs["xaxis"] = dict(
+            tickvals=tickvals,
+            ticktext=ticktext,
+            tickangle=-cfg["dates"]["label_angle"],
+        )
+    else:
+        layout_kwargs["xaxis"] = dict(tickformat=cfg["dates"]["format"])
+
+    fig.update_layout(**layout_kwargs)
 
     out = SCRIPT_DIR / "burndown.html"
     fig.write_html(str(out))
