@@ -19,7 +19,6 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 SCRIPT_DIR = Path(__file__).parent
-SPRINTS_PATH = SCRIPT_DIR / "sprints.csv"
 CONFIG_PATH = SCRIPT_DIR / "config.toml"
 
 LINE_STYLES = {
@@ -57,13 +56,15 @@ def colour_to_rgba(name, opacity=1.0):
     return f"rgba({r},{g},{b},{opacity})"
 
 
-def find_xlsx():
-    files = sorted(SCRIPT_DIR.glob("*.xlsx"))
+def find_file(ext, label):
+    """Find a file by extension, prompting if multiple exist.
+    Sorted by modification time, newest first."""
+    files = sorted(SCRIPT_DIR.glob(f"*.{ext}"), key=lambda f: f.stat().st_mtime, reverse=True)
     if not files:
-        sys.exit("Error: no .xlsx file found in script directory.")
+        sys.exit(f"Error: no .{ext} file found in script directory.")
     if len(files) == 1:
         return files[0]
-    print("Multiple .xlsx files found:")
+    print(f"Multiple {label} files found:")
     for i, f in enumerate(files, 1):
         print(f"  {i}) {f.name}")
     while True:
@@ -105,8 +106,8 @@ def load_tasks(path, export_date=None):
     return df
 
 
-def load_sprints():
-    df = pd.read_csv(SPRINTS_PATH)
+def load_sprints(path):
+    df = pd.read_csv(path)
     df["start_date"] = pd.to_datetime(df["start_date"])
     df["end_date"] = pd.to_datetime(df["end_date"])
     return df.sort_values("start_date").reset_index(drop=True)
@@ -449,10 +450,11 @@ def main():
 
     cfg = load_config()
 
-    xlsx_path = find_xlsx()
+    xlsx_path = find_file("xlsx", ".xlsx")
+    csv_path = find_file("csv", "sprints .csv")
     plan_name, export_date = load_plan_meta(xlsx_path)
     df = load_tasks(xlsx_path, export_date)
-    sprints = load_sprints()
+    sprints = load_sprints(csv_path)
 
     df["sprint"] = df["Due date"].apply(lambda d: assign_sprint(d, sprints))
 
